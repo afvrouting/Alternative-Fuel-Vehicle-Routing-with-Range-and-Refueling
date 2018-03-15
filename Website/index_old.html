@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="initial-scale=1.0, user-scalable=no">
+        <meta charset="utf-8">
+        <title>CNG Route Planning</title>
+        <link href="style.css" rel="stylesheet">
+        <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCClIjuGwWvzGpuK81lyilQUc2iX8cDy1w&sensor=false"></script>
+        <script>
+            var directionDisplay;
+            var directionsService = new google.maps.DirectionsService();
+            var map;
+            var geocoder;
+            var startloc;
+            var endloc;
+            var range;
+            var start;
+            var end;
+
+            function initialize() {
+                geocoder = new google.maps.Geocoder();
+                directionsDisplay = new google.maps.DirectionsRenderer();
+                var chicago = new google.maps.LatLng(41.850033, -87.6500523);
+                var mapOptions = {
+                    zoom: 4,
+                    mapTypeId: google.maps.MapTypeId.ROADMAP,
+                    center: chicago
+                }
+                map = new google.maps.Map(document.getElementById('map-canvas'), mapOptions);
+
+            }
+
+            function calcRoute() {
+                document.getElementById('submit').disabled = true;
+                directionsDisplay.setMap(map);
+                start = document.getElementById('start').value;
+                end = document.getElementById('end').value;
+                codeSAddress(start);
+                codeEAddress(end);
+                range = document.getElementById('range').value;
+                init = document.getElementById('init').value;
+                round = document.getElementById('round').checked;
+            }
+
+            function codeSAddress(address) {
+                geocoder.geocode( { 'address': address}, function(results, status) {
+                    if (status == google.maps.GeocoderStatus.OK) {
+                        startloc = results[0].geometry.location.toString();
+                        /*if (typeof endloc === 'string' && typeof startloc === 'string') {
+                            secondHalf();
+                        }*/
+                    }
+                    else {
+                        alert("Geocode was not successful for the following reason: " + status);
+                    }
+                });
+            }
+            function codeEAddress(address) {
+                geocoder.geocode( { 'address': address}, function(results, status) {
+                    if (status == google.maps.GeocoderStatus.OK) {
+                        endloc = results[0].geometry.location.toString();
+		
+                        if (typeof endloc == 'string' && typeof startloc == 'string') {
+                            secondHalf();
+                        }
+                    }
+                    else {
+                        alert("Geocode was not successful for the following reason: " + status);
+                    }
+                });
+            }
+
+            function secondHalf()
+            {
+                var waypts = [];
+                var stationinfo = [];
+                var xml;
+                console.log("calculate.php?from="+startloc+"&to="+endloc+"&range="+range+"&init="+init+"&round="+round);
+                downloadUrl("/calculate.php?from="+startloc+"&to="+endloc+"&range="+range+"&init="+init+"&round="+round, function(data) {
+                    var xml = data.responseXML;
+                    document.getElementById('submit').disabled = false;
+                    if (!xml) {alert("The program did not return anything in time.  Please try again in a few minutes");directionsDisplay.setMap(null);var summaryPanel = document.getElementById('directions_panel');
+                            summaryPanel.innerHTML = '';return;}
+                    var stations = xml.documentElement.getElementsByTagName("station");
+                    if(stations.length==0){alert("Path Not Refuelable (Empty Results)");directionsDisplay.setMap(null);var summaryPanel = document.getElementById('directions_panel');
+                            summaryPanel.innerHTML = '';return;}
+                    if(stations.length>8)
+                    {
+                        var errordiv = document.getElementById('errordiv');
+                        errordiv.innerHTML = '';
+                        errordiv.innerHTML += '<b><font color="red">This path is refuelable but has too many stops for google to display at once.  Please break your trip into two parts from here.</font></b> ';
+                    }
+                    else{
+                        var errordiv = document.getElementById('errordiv');
+                        errordiv.innerHTML = ''
+                    }
+                    for (var i = 0; i < stations.length && i < 9; i++) {
+                        var name = stations[i].getAttribute("stationnam");
+                        var address = stations[i].getAttribute("address");
+                        var city = stations[i].getAttribute("city");
+                        var id = stations[i].getAttribute("id");
+                        var point = new google.maps.LatLng(
+                        parseFloat(stations[i].getAttribute("lat")),
+                        parseFloat(stations[i].getAttribute("lon")));
+                        waypts.push( {location: point, stopover:true})
+                        stationinfo.push({name:name,address:address, city:city, id:id})
+                    }
+			  
+
+                    if(stations.length>8)
+                    {
+				
+                        var request = {
+                            origin: start,
+                            destination: waypts[8].location,
+                            waypoints: waypts.slice(0,8),
+                            travelMode: google.maps.DirectionsTravelMode.DRIVING,
+                            unitSystem: google.maps.DirectionsUnitSystem.IMPERIAL
+                        };
+                    }
+                    else{
+                        var request = {
+                            origin: start,
+                            destination: end,
+                            waypoints: waypts,
+                            travelMode: google.maps.DirectionsTravelMode.DRIVING,
+                            unitSystem: google.maps.DirectionsUnitSystem.IMPERIAL
+                        };
+                    }
+                    directionsService.route(request, function(response, status) {
+                        if (status == google.maps.DirectionsStatus.OK) {
+                            directionsDisplay.setDirections(response);
+                            var route = response.routes[0];
+                            var summaryPanel = document.getElementById('directions_panel');
+                            summaryPanel.innerHTML = '';
+                            // For each route, display summary information.
+                            var time;
+                            var distance;
+                            for (var i = 0; i < route.legs.length; i++) {
+                                var routeSegment = i + 1;
+                                summaryPanel.innerHTML += '<b>Route Segment: ' + routeSegment + '</b><br>';
+                                summaryPanel.innerHTML += route.legs[i].end_address + '<br>';
+                                summaryPanel.innerHTML += route.legs[i].distance.text + '<br>';
+                                summaryPanel.innerHTML += route.legs[i].duration.text + '<br>';
+                                time += route.legs[i].duration.value;
+                                distance += route.legs[i].distance.value;
+                                if(i<route.legs.length-1)
+                                {
+                                    j = i;
+                                    summaryPanel.innerHTML += "<i>Station: " + stationinfo[j].name + '</i><br>';
+                                }
+                                summaryPanel.innerHTML += '<br>';
+                
+                            }
+                            time = time * 0.000277778;
+                            distance = distance * 0.000621371;
+                        }
+
+                    });
+	
+                }
+            );
+            }
+            function downloadUrl(url, callback) {
+                var request = window.ActiveXObject ?
+                    new ActiveXObject('Microsoft.XMLHTTP') :
+                    new XMLHttpRequest;
+
+                request.onreadystatechange = function() {
+                    if (request.readyState == 4) {
+                        request.onreadystatechange = doNothing;
+                        callback(request, request.status);
+                    }
+                };
+
+                request.open('GET', url, true);
+                request.send(null);
+            }
+            
+            function doNothing() {}
+
+  
+ 
+        </script>
+    </head>
+    <body onload="initialize()">
+        <div id="map-canvas" style="float:right;width:70%;height:100%;"></div>
+        <div id="control_panel" style="float:left;width:30%;text-align:left;padding-top:20px">
+            <center><h1>Alternative Fuel Vehicle Routing with Range and Refueling</center></h1>
+            <div id="inputdiv" style="margin:20px;border-width:2px;">
+                <b>Start location:</b><br/>
+                <input type="text" id="start">
+                <br>
+                <b>End location:</b><br/>
+                <input type="text" id="end">
+                <br/>
+                <b>Vehicle range (mi):</b>
+                <br>
+                <input type="text" id="range">
+                <br/>
+                <b>Initial fuel level (percent):</b>
+                <br>
+                <input type="text" id="init" value="100">
+                <br/>
+                <b>Ensure round trip?</b>
+                <br>
+                <input type="checkbox" id="round">Yes
+                <br/>
+                <input type="submit" id="submit" onclick="calcRoute();">
+            </div>
+            <div id="errordiv"></div>
+            <div id="directions_panel" style="margin:20px;background-color:#FFEE77;">
+                <font size="2">
+                Notes<ul>
+                    <li>This route planner will find you the best feasible path between two points for <b>your</b> vehicle so that you do not run out of fuel en route.</li>
+                    <li>Google limits the number of stops to eight.  Longer trips must be split.</li>
+                    <li>This prototype is currently limited to use for compressed natural gas (CNG), with stations current as of 4/16/2013. To check on station availability, go to <a href="http://www.afdc.energy.gov/locator/stations/route/">http://www.afdc.energy.gov/locator/stations/route/</a>.</li>
+                    <li>If one leg of the route seems to exceed the range, an alternate shorter route exists but is not displayed by google.  This is being worked on.</li>
+                 <li>This could take up to 25 seconds, so please be patient.</li>
+                </ul>
+                 Credits<ul>
+                    <li>link to journal article</li>
+                    <li>for more info contact: <a href="mailto:mpalmer@afvrouting.com">M. Palmer</a></li>
+                    </ul>
+                </font>
+            </div>
+        </div>
+    </body>
+</html>

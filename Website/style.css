@@ -1,0 +1,35 @@
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#map-canvas, #map_canvas {
+  height: 100%;
+}
+
+@media print {
+  html, body {
+    height: auto;
+  }
+
+  #map_canvas {
+    height: 650px;
+  }
+}
+#footer {
+position: fixed;
+bottom: 0px;
+left: 0px;
+z-index: 9999;
+background: #e3e2e2;
+border: 1px solid #c3c3c3;
+border-bottom: none;
+margin: 0px auto;
+-moz-opacity:.90;
+filter:alpha(opacity=90);
+opacity:.90;
+left:0;
+
+}
